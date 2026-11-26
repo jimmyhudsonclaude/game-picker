@@ -102,6 +102,27 @@
   .actions { display: flex; gap: 10px; width: min(360px, 86vw); }
   .actions .btn { flex: 1; padding: 0 12px; }
 
+  .pull + .pull { margin-top: 10px; }
+  #list { display: none; width: 100%; max-width: 520px; flex-direction: column; }
+  body.listing #list { display: flex; }
+  body.listing #picker, body.listing #sub { display: none; }
+  .listhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .listhead .btn { height: 42px; padding: 0 16px; font-size: 15px; }
+  .listhead .what { font-weight: 700; font-size: 16px; line-height: 1.25; }
+  .listhead .what small { display: block; font-weight: 500; font-size: 13px; opacity: .8; }
+  .games { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .games button { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+                  padding: 8px 12px 8px 8px; border-radius: 14px; background: var(--soft);
+                  transition: transform .1s, filter .15s; }
+  .games button:hover { filter: brightness(1.08); }
+  .games button:active { transform: scale(.985); }
+  .games button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+  .thumb { width: 52px; height: 52px; flex: none; border-radius: 9px; overflow: hidden;
+           display: flex; align-items: center; justify-content: center; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gname { font-weight: 700; font-size: 16px; line-height: 1.2; }
+  .gstats { font-size: 13px; font-weight: 600; opacity: .8; margin-top: 3px; }
+  .chev { margin-left: auto; opacity: .6; font-weight: 700; font-size: 18px; }
   .empty { text-align: center; max-width: 360px; margin-top: 4px; font-weight: 600; line-height: 1.4; }
   footer { margin-top: auto; padding-top: 28px; font-size: 12px; opacity: .7; text-align: center; }
   footer a { color: inherit; }
@@ -134,6 +155,15 @@
     </div>
     <div class="count" id="count" aria-live="polite"></div>
     <button class="btn pull" id="pull">Pull a game</button>
+    <button class="btn ghost pull" id="seeall">See all matches</button>
+  </section>
+
+  <section id="list">
+    <div class="listhead">
+      <button class="btn ghost" id="listback">Back</button>
+      <div class="what" id="listwhat"></div>
+    </div>
+    <ul class="games" id="games"></ul>
   </section>
 
   <section id="result">
@@ -239,6 +269,8 @@ function updateCount() {
                          : n === 0 ? 'No games match. Try loosening a filter.'
                          : `${n} game${n === 1 ? '' : 's'} match`;
   $('pull').disabled = n === 0;
+  $('seeall').disabled = n === 0;
+  $('seeall').textContent = n === GAMES.length ? 'See all games' : `See all ${n} match${n === 1 ? '' : 'es'}`;
 }
 
 // ---------- pulling ----------
@@ -289,15 +321,59 @@ function show(g) {
   card.classList.remove('flipped', 'deal'); void card.offsetWidth; card.classList.add('deal');
   $('again').disabled = n < 2;
   $('again').textContent = n < 2 ? 'Only match' : 'Pull again';
+  document.body.classList.remove('listing');
   document.body.classList.add('showing');
+  $('change').textContent = cameFrom === 'list' ? 'Back to list' : 'Filters';
   window.scrollTo(0, 0);
   // warm up the next cover so it pops in fast
   if (bag.length && bag[bag.length - 1].img) new Image().src = bag[bag.length - 1].img;
 }
 
-$('pull').onclick = () => { const g = draw(); if (g) show(g); };
+let cameFrom = 'picker';
+function describe() {
+  const bits = [];
+  if (filters.players) bits.push(filters.players === 9 ? '9+ players' : filters.players + (filters.players === 1 ? ' player' : ' players'));
+  if (filters.time) bits.push(filters.time === 120 ? '2 hours or less' : filters.time + ' min or less');
+  if (filters.weight) bits.push(filters.weight[0].toUpperCase() + filters.weight.slice(1) + ' weight');
+  return bits.length ? bits.join(' · ') : 'No filters';
+}
+function showList() {
+  const list = matches();
+  $('listwhat').innerHTML = '';
+  $('listwhat').append(`${list.length} game${list.length === 1 ? '' : 's'}`);
+  const sm = document.createElement('small'); sm.textContent = describe(); $('listwhat').append(sm);
+  const ul = $('games'); ul.innerHTML = '';
+  for (const g of list) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    const th = document.createElement('span'); th.className = 'thumb'; th.style.background = g.bg;
+    if (g.tn) { const im = document.createElement('img'); im.loading = 'lazy'; im.alt = ''; im.src = g.tn;
+                im.onerror = () => im.remove(); th.append(im); }
+    const txt = document.createElement('span');
+    const nm = document.createElement('div'); nm.className = 'gname'; nm.textContent = g.n;
+    const st = document.createElement('div'); st.className = 'gstats';
+    st.textContent = `${range(...g.p)} players · ${range(...g.t)} min · weight ${g.w ? g.w.toFixed(1) : '?'}`;
+    txt.append(nm, st);
+    const ch = document.createElement('span'); ch.className = 'chev'; ch.textContent = '›';
+    b.append(th, txt, ch);
+    b.onclick = () => { listScroll = window.scrollY; cameFrom = 'list'; show(g); };
+    li.append(b); ul.append(li);
+  }
+  setTheme(HOME);
+  document.body.classList.remove('showing');
+  document.body.classList.add('listing');
+}
+let listScroll = 0;
+
+$('seeall').onclick = () => { showList(); window.scrollTo(0, 0); };
+$('listback').onclick = () => { document.body.classList.remove('listing'); window.scrollTo(0, 0); };
+$('pull').onclick = () => { cameFrom = 'picker'; const g = draw(); if (g) show(g); };
 $('again').onclick = () => { const g = draw(); if (g) show(g); };
-$('change').onclick = () => { document.body.classList.remove('showing'); setTheme(HOME); window.scrollTo(0, 0); };
+$('change').onclick = () => {
+  document.body.classList.remove('showing'); setTheme(HOME);
+  if (cameFrom === 'list') { document.body.classList.add('listing'); window.scrollTo(0, listScroll); }
+  else { document.body.classList.remove('listing'); window.scrollTo(0, 0); }
+};
 const flip = () => $('card').classList.toggle('flipped');
 $('card').onclick = e => { if (!e.target.closest('a')) flip(); };
 $('card').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };

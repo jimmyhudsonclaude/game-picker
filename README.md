@@ -1,6 +1,6 @@
 # Game Picker
 
-Pulls a random game from Jimmy's BoardGameGeek collection. Filters are optional: player count, time limit, and weight (Light under 2, Medium 2 to 3, Heavy over 3). The page takes on the color of whichever game it pulls. Tap the card to flip it.
+Pulls a random game from Jimmy's BoardGameGeek collection, or lists every game that fits ("See all matches"). Filters are optional: player count, time limit, and weight (Light under 2, Medium 2 to 3, Heavy over 3). The page takes on the color of whichever game it pulls. Tap the card to flip it.
 
 **Live site:** https://jimmyhudsonclaude.github.io/game-picker/
 
