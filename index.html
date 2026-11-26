@@ -102,6 +102,16 @@
   .blurb { margin-top: 4cqw; line-height: 1.4; font-size: 4.7cqw; font-weight: 500; }
   .bgg { margin-top: auto; text-align: center; font-size: 3.8cqw; font-weight: 700; color: var(--fg); opacity: .85; }
 
+  html:has(body.showing), body.showing { overscroll-behavior-y: contain; }
+  #pullhint { position: fixed; left: 50%; top: max(14px, env(safe-area-inset-top)); z-index: 5;
+              transform: translate(-50%, -60px); opacity: 0; pointer-events: none;
+              display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+              background: var(--fg); color: var(--bg); font-weight: 800; font-size: 14px;
+              box-shadow: 0 6px 18px rgba(0,0,0,.25); white-space: nowrap; }
+  #pullhint svg { width: 16px; height: 16px; transition: transform .2s; }
+  #pullhint.ready svg { transform: rotate(180deg); }
+  .flip.snap { transition: transform .35s cubic-bezier(.2,.9,.3,1.2); }
+  .flip.toss { transition: transform .32s cubic-bezier(.5,0,.9,.5), opacity .32s; opacity: 0; }
   .tap { font-size: 13px; opacity: .75; margin: 12px 0 16px; font-weight: 600; }
   .actions { display: flex; gap: 10px; width: min(360px, 86vw); }
   .actions .btn { flex: 1; padding: 0 12px; }
@@ -170,6 +180,7 @@
     <ul class="games" id="games"></ul>
   </section>
 
+  <div id="pullhint" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg><span>Pull for another game</span></div>
   <section id="result">
     <div class="meta" id="meta"></div>
     <div class="flip" id="card" role="button" tabindex="0" aria-label="Flip card">
@@ -193,7 +204,7 @@
         </div>
       </div>
     </div>
-    <div class="tap">Tap the card to flip it</div>
+    <div class="tap" id="tap">Tap to flip · Pull down for another game</div>
     <div class="actions">
       <button class="btn" id="again">Pull again</button>
       <button class="btn ghost" id="change">Filters</button>
@@ -325,6 +336,7 @@ function show(g) {
   card.classList.remove('flipped', 'deal'); void card.offsetWidth; card.classList.add('deal');
   $('again').disabled = n < 2;
   $('again').textContent = n < 2 ? 'Only match' : 'Pull again';
+  $('tap').textContent = n < 2 ? 'Tap the card to flip it' : 'Tap to flip · Pull down for another game';
   document.body.classList.remove('listing');
   document.body.classList.add('showing');
   $('change').textContent = cameFrom === 'list' ? 'Back to list' : 'Filters';
@@ -402,8 +414,60 @@ async function flip() {
   try { await a2.finished; } catch (e) {}
   flipping = false;
 }
-$('card').onclick = e => { if (!e.target.closest('a')) flip(); };
+$('card').onclick = e => { if (Date.now() - lastDrag < 400) return; if (!e.target.closest('a')) flip(); };
 $('card').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
+
+// ---------- pull down for another game ----------
+let startY = null, pullPx = 0, lastDrag = 0;
+const READY = 80;
+const hint = $('pullhint');
+function setPull(px) {
+  pullPx = px;
+  const card = $('card');
+  card.style.transform = px ? `translateY(${px}px) rotate(${px / 45}deg)` : '';
+  hint.style.opacity = Math.min(1, px / 50);
+  hint.style.transform = `translate(-50%, ${Math.min(0, px - 60)}px)`;
+  const ready = px >= READY;
+  hint.classList.toggle('ready', ready);
+  hint.querySelector('span').textContent = ready ? 'Let go for another game' : 'Pull for another game';
+}
+function resetHint() { hint.style.opacity = 0; hint.style.transform = ''; }
+document.addEventListener('touchstart', e => {
+  if (!document.body.classList.contains('showing') || window.scrollY > 0 || flipping || e.touches.length > 1) return;
+  if (e.target.closest('button, a')) return;
+  startY = e.touches[0].clientY; pullPx = 0;
+  $('card').classList.remove('deal', 'snap', 'toss');
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (startY === null) return;
+  const dy = e.touches[0].clientY - startY;
+  if (dy <= 0) { setPull(0); return; }
+  e.preventDefault();                        // stop the browser's own pull-to-refresh
+  if (dy > 8) lastDrag = Date.now();
+  setPull(Math.min(170, dy * 0.55));         // a little resistance
+}, { passive: false });
+document.addEventListener('touchend', () => {
+  if (startY === null) return;
+  startY = null;
+  const card = $('card');
+  const canPull = matches().length > 1;
+  if (pullPx >= READY && canPull) {
+    lastDrag = Date.now();
+    card.classList.add('toss');
+    card.style.transform = `translateY(${window.innerHeight}px) rotate(12deg)`;
+    resetHint();
+    setTimeout(() => {
+      card.classList.remove('toss'); card.style.transform = '';
+      const g = draw(); if (g) show(g);
+    }, 300);
+  } else {
+    card.classList.add('snap');
+    setPull(0); resetHint();
+    setTimeout(() => card.classList.remove('snap'), 360);
+  }
+  pullPx = 0;
+});
+document.addEventListener('touchcancel', () => { if (startY !== null) { startY = null; setPull(0); resetHint(); } });
 
 renderChips(); updateCount();
 </script>
